@@ -1,0 +1,30 @@
+{
+  "name": "data-forge",
+  "productName": "Data Forge",
+  "version": "1.0.0",
+  "description": "ROI data file mapper and CSV exporter",
+  "main": ".vite/build/index.js",
+  "scripts": {
+    "start": "electron-forge start",
+    "dev": "electron-forge start",
+    "package": "electron-forge package",
+    "make": "electron-forge make"
+  },
+  "dependencies": {
+    "electron-store": "^8.2.0",
+    "exceljs": "^4.4.0",
+    "lucide-react": "^0.468.0",
+    "parquetjs-lite": "^0.8.7",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@electron-forge/cli": "^7.6.0",
+    "@electron-forge/maker-dmg": "^7.6.0",
+    "@electron-forge/maker-zip": "^7.6.0",
+    "@electron-forge/plugin-vite": "^7.6.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "electron": "^35.0.0",
+    "vite": "^6.0.0"
+  }
+}

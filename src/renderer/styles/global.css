@@ -1,0 +1,103 @@
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  --bg-primary:    #f0f2f5;
+  --bg-secondary:  #e8eaee;
+  --bg-tertiary:   #e2e5ea;
+  --bg-card:       #ffffff;
+  --bg-hover:      #dde0e6;
+  --bg-input:      #f5f6f8;
+
+  --border:        #d0d3dc;
+  --border-light:  #dde0e8;
+
+  --text-primary:   #1e2030;
+  --text-secondary: #5a5e78;
+  --text-muted:     #8a8ea8;
+
+  --accent:        #3a80d2;
+  --accent-hover:  #2a70c2;
+  --success:       #27ae60;
+  --danger:        #e53e3e;
+  --warning:       #d97706;
+}
+
+:root[data-theme="dark"] {
+  --bg-primary:    #1a1b2e;
+  --bg-secondary:  #232438;
+  --bg-tertiary:   #2a2b42;
+  --bg-card:       #262840;
+  --bg-hover:      #2f3150;
+  --bg-input:      #1e1f34;
+
+  --border:        #363856;
+  --border-light:  #2e3050;
+
+  --text-primary:   #e8e9f0;
+  --text-secondary: #a0a3b8;
+  --text-muted:     #6b6e85;
+
+  --accent:        #4a90e2;
+  --accent-hover:  #3a7bd5;
+  --success:       #34d399;
+  --danger:        #f87171;
+  --warning:       #fbbf24;
+}
+
+html, body, #root {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+button {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+input, textarea {
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+input::placeholder {
+  color: var(--text-muted);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+::-webkit-scrollbar       { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--text-muted); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
+
+button, input, select, [role="button"] {
+  -webkit-app-region: no-drag;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
