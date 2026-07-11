@@ -2,6 +2,8 @@
 
 Data Forge is a desktop app (Electron + React) that takes arbitrary CSV/TSV/TXT/Excel files, maps their columns onto a standardized ROI schema, validates the data, and exports clean CSV or Parquet output ready to push into a data lake.
 
+![Data Forge screenshot](docs/screenshot.png)
+
 ## What it does
 
 - Loads one or more source files and infers delimiter, headers, and column stats without ever loading full files into memory (streaming parse, so multi-GB files are fine)
