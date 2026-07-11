@@ -3,7 +3,7 @@ import forgeLogo from '../forge_logo.png';
 import { tokens } from '../styles/theme';
 import {
   BarChart3, Upload, FileText, Download, CheckCircle2, AlertCircle, Info,
-  BookMarked, Save, Trash2, Sun, Moon,
+  BookMarked, Save, Trash2, Sun, Moon, ChevronDown,
 } from 'lucide-react';
 import ThemedSelect from '../components/ThemedSelect';
 
@@ -12,21 +12,31 @@ import ThemedSelect from '../components/ThemedSelect';
 const FILE_TYPE_CONFIGS = {
   'ROI Eligibility': {
     fields: [
-      'chief_client_id', 'member_id', 'eph_id', 'health_plan_member_id',
-      'member_first_name', 'member_last_name', 'dob', 'gender',
-      'relationship', 'coverage_start_date', 'coverage_end_date',
+      'member_id', 'eph_id',
+      'member_first_name', 'member_last_name', 'member_dob',
+      'mailing_state', 'mailing_zip', 'gender', 'relationship',
+      'coverage_start_date', 'coverage_end_date',
+      'subscriber_id', 'subscriber_first_name', 'subscriber_last_name', 'subscriber_birth_date',
+      'plan_type', 'group_id', 'snp_type',
+      'extra1', 'extra2', 'extra3',
     ],
-    defaultNonOptional: ['member_first_name', 'member_last_name', 'dob'],
+    defaultNonOptional: ['member_first_name', 'member_last_name', 'member_dob'],
   },
   'ROI Claims': {
     fields: [
-      'chief_client_id', 'claim_id', 'member_id', 'eph_id',
-      'member_first_name', 'member_last_name', 'member_dob', 'member_gender',
-      'relationship', 'subscriber_id', 'subscriber_first_name', 'subscriber_last_name',
-      'subscriber_birth_date', 'claim_date', 'service_start_date', 'service_end_date',
-      'paid_amt', 'type_of_service', 'revenue_code', 'provider_tin_code', 'provider_specialty_code',
+      'claim_id', 'claim_line_number',
+      'member_id', 'eph_id', 'member_first_name', 'member_last_name', 'member_dob',
+      'hashed_member_first_name', 'hashed_member_last_name', 'hashed_member_dob',
+      'service_start_date', 'service_end_date', 'paid_date', 'paid_amt',
+      'revenue_code', 'provider_tin_code', 'provider_specialty_code',
+      'dx_related_group_code', 'line_procedure_modifier', 'line_procedure_type',
+      'place_of_service', 'allowed_amt', 'copay_amt', 'deductible_amt', 'coinsurance_amt',
+      'hcfa_admit_type_cd', 'admit_date', 'discharge_date', 'icd_indicator',
       'diagnosis_code_1', 'diagnosis_code_2', 'diagnosis_code_3', 'diagnosis_code_4', 'diagnosis_code_5',
       'diagnosis_code_6', 'diagnosis_code_7', 'diagnosis_code_8', 'diagnosis_code_9', 'diagnosis_code_10',
+      'diagnosis_code_11', 'diagnosis_code_12', 'diagnosis_code_13', 'diagnosis_code_14', 'diagnosis_code_15',
+      'diagnosis_code_16', 'diagnosis_code_17', 'diagnosis_code_18', 'diagnosis_code_19', 'diagnosis_code_20',
+      'diagnosis_code_21', 'diagnosis_code_22', 'diagnosis_code_23', 'diagnosis_code_24', 'diagnosis_code_25',
       'procedure_code_1', 'procedure_code_2', 'procedure_code_3', 'procedure_code_4', 'procedure_code_5',
       'procedure_code_6',
     ],
@@ -49,41 +59,51 @@ const RELATIONSHIP_VALUES = [
 const GENDER_VALUES = [
   { value: 'm', label: 'M' },
   { value: 'f', label: 'F' },
+  { value: 'u', label: 'U' },
 ];
 
 const GENDER_FIELDS = new Set(['gender', 'member_gender']);
+const MONEY_FIELDS  = new Set(['paid_amt', 'allowed_amt', 'copay_amt', 'deductible_amt', 'coinsurance_amt']);
 
 // ─── Small renderer-side helpers (only used for preview transforms) ───────────
 
 function toYMD(val) {
   const s = (val ?? '').trim();
   if (!s) return s;
-  let m;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-  m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
-  if (m) return `${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;
-  m = s.match(/^(\d{4})[\/.](\d{2})[\/.](\d{2})$/);
-  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
-  m = s.match(/^(\d{4})(\d{2})(\d{2})$/);
-  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
-  m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2})$/);
-  if (m) {
+  let m, result;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    result = s;
+  } else if ((m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/))) {
+    result = `${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;
+  } else if ((m = s.match(/^(\d{4})[\/.](\d{2})[\/.](\d{2})$/))) {
+    result = `${m[1]}-${m[2]}-${m[3]}`;
+  } else if ((m = s.match(/^(\d{4})(\d{2})(\d{2})$/))) {
+    result = `${m[1]}-${m[2]}-${m[3]}`;
+  } else if ((m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2})$/))) {
     const yr = parseInt(m[3]);
     const yyyy = yr >= 25 ? `19${m[3].padStart(2,'0')}` : `20${m[3].padStart(2,'0')}`;
-    return `${yyyy}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;
-  }
-  if (/^\d{5}$/.test(s)) {
+    result = `${yyyy}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;
+  } else if (/^\d{5}$/.test(s)) {
     const serial = parseInt(s);
     if (serial >= 7305 && serial <= 54787) {
       const d = new Date((serial - 25569) * 86400000);
-      if (!isNaN(d)) return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
+      if (!isNaN(d)) result = `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
     }
   }
-  return '';
+  if (!result) return '';
+  // Sentinel / out-of-range years (e.g. 99999999, 99991231, 88881231) → 2099-12-31
+  return parseInt(result.slice(0, 4), 10) > 2099 ? '2099-12-31' : result;
 }
 
-function transformValue(field, raw, valueMappings) {
-  if (['dob','coverage_start_date','coverage_end_date','member_dob','subscriber_birth_date','claim_date','service_start_date','service_end_date'].includes(field)) return toYMD(raw);
+function transformValue(field, raw, valueMappings, opts = {}) {
+  if (['dob','ingestion_date','coverage_start_date','coverage_end_date','member_dob','subscriber_birth_date','claim_date','paid_date','service_start_date','service_end_date'].includes(field)) return toYMD(raw);
+  if (MONEY_FIELDS.has(field)) {
+    const cleaned = (raw ?? '').replace(/[$,\s]/g, '');
+    if (!cleaned) return '';
+    const num = parseFloat(cleaned);
+    if (isNaN(num)) return cleaned;
+    return opts.divideBy100 ? (num / 100).toFixed(2) : cleaned;
+  }
   if (field === 'relationship') return valueMappings?.relationship?.[raw] ?? raw;
   if (GENDER_FIELDS.has(field)) return valueMappings?.gender?.[raw] ?? raw;
   return raw;
@@ -95,6 +115,107 @@ function csvCell(val) {
     return '"' + s.replace(/"/g, '""') + '"';
   }
   return s;
+}
+
+// Given the column chosen for code_1, try to find matching columns for codes 2-N.
+// Detects the rightmost digit sequence whose value is 1 and replaces it with the
+// target index, trying both the original padding (e.g. "01") and no padding.
+function applyCodeRange(firstCol, lastCol, codeFields, allColumns) {
+  const startIdx = allColumns.indexOf(firstCol);
+  if (startIdx === -1) return Object.fromEntries(codeFields.map(f => [f, undefined]));
+  const endIdx = lastCol ? Math.max(startIdx, allColumns.indexOf(lastCol)) : startIdx;
+  const patch = {};
+  codeFields.forEach((field, i) => {
+    const colIdx = startIdx + i;
+    patch[field] = colIdx <= endIdx ? allColumns[colIdx] : undefined;
+  });
+  return patch;
+}
+
+function deriveRangeFromMappings(mappings, codeFields) {
+  if (!codeFields.length) return { first: '', last: '' };
+  const first = mappings[codeFields[0]] || '';
+  if (!first) return { first: '', last: '' };
+  const lastField = [...codeFields].reverse().find(f => mappings[f]);
+  const last = (lastField && lastField !== codeFields[0]) ? (mappings[lastField] || '') : '';
+  return { first, last };
+}
+
+// ─── Fuzzy field auto-mapper ──────────────────────────────────────────────────
+
+const FUZZY_ABBREVS = {
+  mbr: 'member', mem: 'member',
+  fname: 'first', lname: 'last', nm: 'name',
+  dob: 'dob', bdate: 'dob', birth: 'dob', bthdt: 'dob', birthdt: 'dob', bdt: 'dob',
+  dt: 'date', dte: 'date',
+  eff: 'start', begin: 'start', strt: 'start', bgn: 'start',
+  term: 'end', thru: 'end', exp: 'end', thrudt: 'end',
+  cov: 'coverage',
+  dx: 'diagnosis', diag: 'diagnosis', icd: 'diagnosis',
+  proc: 'procedure', px: 'procedure', cpt: 'procedure', prc: 'procedure',
+  cd: 'code',
+  sub: 'subscriber', sbscr: 'subscriber',
+  sex: 'gender', gndr: 'gender', gnd: 'gender',
+  rel: 'relationship', reln: 'relationship',
+  amt: 'amount', amnt: 'amount',
+  rev: 'revenue',
+  prov: 'provider', prvdr: 'provider', prv: 'provider',
+  svc: 'service', srv: 'service',
+  clm: 'claim',
+  ln: 'line', lne: 'line',
+  num: 'number', nbr: 'number',
+  tin: 'tin',
+  spc: 'specialty', spec: 'specialty', splty: 'specialty',
+  adm: 'admit',
+  dsch: 'discharge',
+  pd: 'paid', pmt: 'paid',
+  hsh: 'hashed',
+  zip: 'zip', postal: 'zip',
+  st: 'state',
+  grp: 'group',
+  pln: 'plan',
+  hcfa: 'hcfa',
+  snp: 'snp',
+  eph: 'eph',
+};
+
+function fuzzyTokenize(str) {
+  const lower = str.toLowerCase();
+  const text = new Set(lower.split(/[^a-z]+/).filter(Boolean).map(t => FUZZY_ABBREVS[t] ?? t));
+  // Normalise numbers so "01" and "1" are equivalent
+  const nums = new Set((lower.match(/\d+/g) ?? []).map(n => String(parseInt(n, 10))));
+  return { text, nums };
+}
+
+function fuzzyScore(roiField, sourceCol) {
+  const roi = fuzzyTokenize(roiField);
+  const src = fuzzyTokenize(sourceCol);
+
+  let textHits = 0;
+  for (const t of roi.text) if (src.text.has(t)) textHits++;
+  const textScore = roi.text.size > 0 ? textHits / roi.text.size : 0;
+
+  if (roi.nums.size > 0) {
+    let numHits = 0;
+    for (const n of roi.nums) if (src.nums.has(n)) numHits++;
+    return textScore * 0.6 + (numHits / roi.nums.size) * 0.4;
+  }
+  // No number expected — penalise source columns that carry one
+  return textScore - (src.nums.size > 0 ? 0.3 : 0);
+}
+
+function autoMapFields(roiFields, sourceColumns) {
+  const THRESHOLD = 0.5;
+  const mapped = {};
+  for (const field of roiFields) {
+    let bestCol = null, bestScore = THRESHOLD;
+    for (const col of sourceColumns) {
+      const s = fuzzyScore(field, col);
+      if (s > bestScore) { bestScore = s; bestCol = col; }
+    }
+    if (bestCol) mapped[field] = bestCol;
+  }
+  return mapped;
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
@@ -229,6 +350,7 @@ export default function ROIAnalysis() {
     [fileType]);
 
   const [exportFormat, setExportFormat]         = useState('csv');
+  const [divideAmountFields, setDivideAmountFields] = useState({});
   const [status, setStatus]                     = useState(null);
   const [validationData, setValidationData]     = useState(null);
   const [showHowTo, setShowHowTo]               = useState(false);
@@ -240,6 +362,12 @@ export default function ROIAnalysis() {
   const [lastValidationHadIssues, setLastValidationHadIssues] = useState(null);
   const [allowedRowIndices, setAllowedRowIndices] = useState(new Set());
   const [loadingProgress, setLoadingProgress] = useState(null); // null = idle, or { fileName, fileIndex, totalFiles, percent }
+  const [diagnosisExpanded, setDiagnosisExpanded] = useState(false);
+  const [procedureExpanded, setProcedureExpanded] = useState(false);
+  const [dxFirst, setDxFirst]     = useState('');
+  const [dxLast, setDxLast]       = useState('');
+  const [procFirst, setProcFirst] = useState('');
+  const [procLast, setProcLast]   = useState('');
   const [exportRowCount, setExportRowCount]     = useState(0);
 
   // Presets
@@ -308,7 +436,7 @@ export default function ROIAnalysis() {
     return [...seen].sort();
   }, [files, mappings, genderFieldName]);
 
-  // Auto-fill gender values that are already f/m
+  // Auto-fill gender mappings when source values are recognised
   useEffect(() => {
     if (!uniqueGenderValues.length) return;
     setGenderMappings((prev) => {
@@ -316,8 +444,13 @@ export default function ROIAnalysis() {
       let changed = false;
       for (const val of uniqueGenderValues) {
         if (next[val]) continue;
-        const lower = val.toLowerCase();
-        if (lower === 'f' || lower === 'm') { next[val] = lower; changed = true; }
+        const lower = val.toLowerCase().trim();
+        let mapped;
+        if (['f', 'female', 'woman', 'girl', '2'].includes(lower)) mapped = 'f';
+        else if (['m', 'male', 'man', 'boy', '1'].includes(lower)) mapped = 'm';
+        else mapped = 'u';
+        next[val] = mapped;
+        changed = true;
       }
       return changed ? next : prev;
     });
@@ -355,18 +488,31 @@ export default function ROIAnalysis() {
       if (result?.canceled) return;
       setFiles(result.files);
       if (result.detectedDelimiter) setDelimiter(result.detectedDelimiter);
-      setMappingsByType({});
+      const autoMapped = hasHeader && result.files[0]?.columns?.length
+        ? autoMapFields(cfg.fields, result.files[0].columns)
+        : {};
+      setMappingsByType({ [fileType]: autoMapped });
       setRelMappingsByType({});
       setGenderMappingsByType({});
+      const dxFields_ = cfg.fields.filter(f => f.startsWith('diagnosis_code_'));
+      const procFields_ = cfg.fields.filter(f => f.startsWith('procedure_code_'));
+      const { first: newDxFirst, last: newDxLast } = deriveRangeFromMappings(autoMapped, dxFields_);
+      const { first: newProcFirst, last: newProcLast } = deriveRangeFromMappings(autoMapped, procFields_);
+      setDxFirst(newDxFirst); setDxLast(newDxLast);
+      setProcFirst(newProcFirst); setProcLast(newProcLast);
       setAllowedRowIndices(new Set());
       setExportRowCount(0);
       setValidationData(null);
+      const autoCount = Object.keys(autoMapped).length;
+      if (autoCount > 0) {
+        setStatus({ type: 'info', text: `Auto-mapped ${autoCount} of ${cfg.fields.length} fields — review and adjust as needed.` });
+      }
     } catch (err) {
       window.electronAPI.offFileProgress();
       setLoadingProgress(null);
       setStatus({ type: 'error', text: `Failed to open files: ${err?.message || err}` });
     }
-  }, [delimiter, hasHeader]);
+  }, [delimiter, hasHeader, cfg, fileType]);
 
   const handleAddFiles = useCallback(async () => {
     setStatus(null);
@@ -403,6 +549,14 @@ export default function ROIAnalysis() {
     setMappingsByType(prev => ({ ...prev, [type]: p.mappings || {} }));
     setRelMappingsByType(prev => ({ ...prev, [type]: p.relationshipMappings || {} }));
     setGenderMappingsByType(prev => ({ ...prev, [type]: p.genderMappings || {} }));
+    const loadedMappings = p.mappings || {};
+    const cfg_ = FILE_TYPE_CONFIGS[type];
+    const dxFields_ = (cfg_?.fields ?? []).filter(f => f.startsWith('diagnosis_code_'));
+    const procFields_ = (cfg_?.fields ?? []).filter(f => f.startsWith('procedure_code_'));
+    const { first: newDxFirst, last: newDxLast } = deriveRangeFromMappings(loadedMappings, dxFields_);
+    const { first: newProcFirst, last: newProcLast } = deriveRangeFromMappings(loadedMappings, procFields_);
+    setDxFirst(newDxFirst); setDxLast(newDxLast);
+    setProcFirst(newProcFirst); setProcLast(newProcLast);
     setPresetStatus({ type: 'success', text: `Loaded "${selectedPreset}"` });
   }, [selectedPreset, presets]);
 
@@ -465,8 +619,7 @@ export default function ROIAnalysis() {
         Object.keys(result.emptyRequiredFields).length > 0 ||
         result.dateLogicErrors.length > 0 ||
         Object.keys(result.unmappedValues).length > 0 ||
-        result.paidAmtIssues.nonNumeric.length > 0 ||
-        result.paidAmtIssues.negative.length > 0;
+        result.paidAmtIssues.nonNumeric.length > 0;
       setLastValidationHadIssues(hasIssues);
       setExportRowCount(result.exportRowCount ?? totalRows);
       setValidationData(result);
@@ -480,27 +633,30 @@ export default function ROIAnalysis() {
     setStatus(null);
     setLastValidationHadIssues(false);
 
-    const baseName = files[0]?.name.replace(/\.(csv|txt|tsv|xlsx|xls)$/i, '') ?? 'roi';
+    const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const typeSlug = fileType === 'ROI Eligibility' ? 'roi_eligibility' : 'roi_claims';
 
     try {
       let result;
       if (exportFormat === 'parquet') {
         result = await window.electronAPI.roiExportParquet({
-          defaultFilename: `${baseName}_roi_export.parquet`,
+          defaultFilename: `${typeSlug}_${today}.parquet`,
           mappings,
           relationshipMappings,
           genderMappings,
           fields: cfg.fields,
           allowedRowIndices: [...allowedRowIndices],
+          divideAmountFields,
         });
       } else {
         result = await window.electronAPI.roiExportMainCsv({
-          defaultFilename: `${baseName}_roi_export.csv`,
+          defaultFilename: `${typeSlug}_${today}.csv`,
           mappings,
           relationshipMappings,
           genderMappings,
           fields: cfg.fields,
           allowedRowIndices: [...allowedRowIndices],
+          divideAmountFields,
         });
       }
       if (result?.canceled) return;
@@ -508,7 +664,7 @@ export default function ROIAnalysis() {
     } catch (err) {
       setStatus({ type: 'error', text: `Export failed: ${err?.message || err}` });
     }
-  }, [mappings, relationshipMappings, genderMappings, cfg, files, exportFormat, allowedRowIndices]);
+  }, [mappings, relationshipMappings, genderMappings, cfg, files, exportFormat, allowedRowIndices, divideAmountFields, fileType]);
 
   const handleAllowRow = useCallback((globalIdx) => {
     setAllowedRowIndices(prev => new Set([...prev, globalIdx]));
@@ -548,6 +704,19 @@ export default function ROIAnalysis() {
       setStatus({ type: 'error', text: `Export failed: ${err?.message || err}` });
     }
   }, [mappings, cfg, allowedRowIndices]);
+
+  const handleExportSummary = useCallback(async () => {
+    const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    try {
+      const result = await window.electronAPI.roiExportSummary({
+        defaultFilename: `roi_logs_${today}.csv`,
+      });
+      if (result?.canceled) return;
+      setStatus({ type: 'success', text: `Summary saved: ${result.filePath}` });
+    } catch (err) {
+      setStatus({ type: 'error', text: `Summary export failed: ${err?.message || err}` });
+    }
+  }, [files]);
 
   const handleExportDateErrors = useCallback(async (field, info) => {
     const rows = [
@@ -609,7 +778,7 @@ export default function ROIAnalysis() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <h1 style={{ ...s.title, display: 'flex', alignItems: 'center', gap: 10 }}>
           <img src={forgeLogo} alt="" style={{ width: 64, height: 64, borderRadius: 10 }} />
-          Data Forge
+          DataForge
         </h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button
@@ -623,6 +792,19 @@ export default function ROIAnalysis() {
             }}
           >
             <Info size={13} /> How To
+          </button>
+          <button
+            onClick={() => window.electronAPI.openLogFile()}
+            title="Open the debug log file in your default text editor"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '6px 14px', borderRadius: tokens.radius.md,
+              border: '1px solid var(--border)', background: 'var(--bg-input)',
+              color: 'var(--text-secondary)', fontSize: tokens.fontSize.sm,
+              fontWeight: 600, cursor: 'pointer',
+            }}
+          >
+            <FileText size={13} /> Open Log
           </button>
           <button
             onClick={() => setDarkMode(d => !d)}
@@ -721,6 +903,11 @@ export default function ROIAnalysis() {
                       </span>
                       <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>
                         {rowCount.toLocaleString()} rows
+                        {f.duplicateCount > 0 && (
+                          <span style={{ marginLeft: 6, color: 'var(--danger)', fontWeight: 600 }}>
+                            ({f.duplicateCount.toLocaleString()} dupes removed)
+                          </span>
+                        )}
                       </span>
                       <button
                         onClick={() => setFiles((prev) => prev.filter((_, j) => j !== i))}
@@ -868,6 +1055,210 @@ export default function ROIAnalysis() {
                 <div>Sample Value</div>
               </div>
               {cfg.fields.map((field) => {
+                // Procedure codes collapsible group
+                const isProcField = field.startsWith('procedure_code_');
+                if (isProcField && field !== 'procedure_code_1') return null;
+                if (field === 'procedure_code_1') {
+                  const procFields = cfg.fields.filter((f) => f.startsWith('procedure_code_'));
+                  const procMappedCount = procFields.filter((f) => mappings[f]).length;
+                  const groupBtnStyle = {
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    width: '100%', padding: '7px 4px',
+                    background: 'none', border: 'none', borderBottom: '1px solid var(--border)',
+                    cursor: 'pointer', textAlign: 'left', color: 'var(--text-muted)',
+                    fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px',
+                  };
+                  return (
+                    <div key="procedure_codes_group">
+                      <button onClick={() => setProcedureExpanded((x) => !x)} style={groupBtnStyle}>
+                        <ChevronDown
+                          size={13}
+                          style={{ transition: 'transform 150ms ease', transform: procedureExpanded ? 'rotate(0deg)' : 'rotate(-90deg)', flexShrink: 0 }}
+                        />
+                        Procedure Codes
+                        <span style={{ marginLeft: 'auto', fontWeight: 400, textTransform: 'none', letterSpacing: 0, fontSize: 12 }}>
+                          {procMappedCount > 0
+                            ? `${procMappedCount} of ${procFields.length} mapped`
+                            : `${procFields.length} fields — click to expand`}
+                        </span>
+                      </button>
+                      {procedureExpanded && (
+                        <div>
+                          <div style={s.mappingRow}>
+                            <div style={{ fontSize: tokens.fontSize.sm, color: 'var(--text-primary)' }}>First column</div>
+                            <ThemedSelect
+                              value={procFirst}
+                              onChange={(v) => {
+                                setProcFirst(v);
+                                if (!v) {
+                                  setProcLast('');
+                                  setMappings(m => { const n = {...m}; procFields.forEach(f => delete n[f]); return n; });
+                                } else {
+                                  const effectiveLast = (procLast && columns.indexOf(procLast) >= columns.indexOf(v)) ? procLast : '';
+                                  if (!effectiveLast && procLast) setProcLast('');
+                                  const patch = applyCodeRange(v, effectiveLast, procFields, columns);
+                                  setMappings(m => {
+                                    const next = {...m};
+                                    Object.entries(patch).forEach(([k, val]) => { if (val) next[k] = val; else delete next[k]; });
+                                    return next;
+                                  });
+                                }
+                              }}
+                              placeholder="Not Mapped"
+                              searchable
+                              options={[
+                                { value: '', label: 'Not Mapped' },
+                                ...columns.map((c, i) => ({ value: c, label: `${i}: ${c}`, searchLabel: c, sublabel: sampleRow[c] ?? '' })),
+                              ]}
+                            />
+                            <div style={{ fontSize: 11, fontFamily: tokens.font.mono, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {procFirst ? (sampleRow[procFirst] || '—') : ''}
+                            </div>
+                          </div>
+                          <div style={s.mappingRow}>
+                            <div style={{ fontSize: tokens.fontSize.sm, color: 'var(--text-primary)' }}>Last column</div>
+                            <ThemedSelect
+                              value={procLast}
+                              onChange={(v) => {
+                                setProcLast(v);
+                                if (procFirst) {
+                                  const patch = applyCodeRange(procFirst, v, procFields, columns);
+                                  setMappings(m => {
+                                    const next = {...m};
+                                    Object.entries(patch).forEach(([k, val]) => { if (val) next[k] = val; else delete next[k]; });
+                                    return next;
+                                  });
+                                }
+                              }}
+                              placeholder={procFirst ? 'Same as first' : 'Select first column'}
+                              searchable
+                              options={[
+                                { value: '', label: procFirst ? 'Same as first' : 'Select first column' },
+                                ...columns
+                                  .filter((_, i) => !procFirst || i >= columns.indexOf(procFirst))
+                                  .map((c) => {
+                                    const origIdx = columns.indexOf(c);
+                                    return { value: c, label: `${origIdx}: ${c}`, searchLabel: c, sublabel: sampleRow[c] ?? '' };
+                                  }),
+                              ]}
+                            />
+                            <div style={{ fontSize: 11, fontFamily: tokens.font.mono, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {procLast ? (sampleRow[procLast] || '—') : ''}
+                            </div>
+                          </div>
+                          {procFirst && (
+                            <div style={{ padding: '6px 4px 2px', fontSize: 12, color: 'var(--text-muted)' }}>
+                              {procMappedCount} of {procFields.length} procedure codes mapped
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+
+                // Diagnosis codes are rendered as a collapsible group at diagnosis_code_1
+                const isDxField = field.startsWith('diagnosis_code_');
+                if (isDxField && field !== 'diagnosis_code_1') return null;
+                if (field === 'diagnosis_code_1') {
+                  const dxFields = cfg.fields.filter((f) => f.startsWith('diagnosis_code_'));
+                  const dxMappedCount = dxFields.filter((f) => mappings[f]).length;
+                  const dxGroupBtnStyle = {
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    width: '100%', padding: '7px 4px',
+                    background: 'none', border: 'none', borderBottom: '1px solid var(--border)',
+                    cursor: 'pointer', textAlign: 'left', color: 'var(--text-muted)',
+                    fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px',
+                  };
+                  return (
+                    <div key="diagnosis_codes_group">
+                      <button onClick={() => setDiagnosisExpanded((x) => !x)} style={dxGroupBtnStyle}>
+                        <ChevronDown
+                          size={13}
+                          style={{ transition: 'transform 150ms ease', transform: diagnosisExpanded ? 'rotate(0deg)' : 'rotate(-90deg)', flexShrink: 0 }}
+                        />
+                        Diagnosis Codes
+                        <span style={{ marginLeft: 'auto', fontWeight: 400, textTransform: 'none', letterSpacing: 0, fontSize: 12 }}>
+                          {dxMappedCount > 0
+                            ? `${dxMappedCount} of ${dxFields.length} mapped`
+                            : `${dxFields.length} fields — click to expand`}
+                        </span>
+                      </button>
+                      {diagnosisExpanded && (
+                        <div>
+                          <div style={s.mappingRow}>
+                            <div style={{ fontSize: tokens.fontSize.sm, color: 'var(--text-primary)' }}>First column</div>
+                            <ThemedSelect
+                              value={dxFirst}
+                              onChange={(v) => {
+                                setDxFirst(v);
+                                if (!v) {
+                                  setDxLast('');
+                                  setMappings(m => { const n = {...m}; dxFields.forEach(f => delete n[f]); return n; });
+                                } else {
+                                  const effectiveLast = (dxLast && columns.indexOf(dxLast) >= columns.indexOf(v)) ? dxLast : '';
+                                  if (!effectiveLast && dxLast) setDxLast('');
+                                  const patch = applyCodeRange(v, effectiveLast, dxFields, columns);
+                                  setMappings(m => {
+                                    const next = {...m};
+                                    Object.entries(patch).forEach(([k, val]) => { if (val) next[k] = val; else delete next[k]; });
+                                    return next;
+                                  });
+                                }
+                              }}
+                              placeholder="Not Mapped"
+                              searchable
+                              options={[
+                                { value: '', label: 'Not Mapped' },
+                                ...columns.map((c, i) => ({ value: c, label: `${i}: ${c}`, searchLabel: c, sublabel: sampleRow[c] ?? '' })),
+                              ]}
+                            />
+                            <div style={{ fontSize: 11, fontFamily: tokens.font.mono, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {dxFirst ? (sampleRow[dxFirst] || '—') : ''}
+                            </div>
+                          </div>
+                          <div style={s.mappingRow}>
+                            <div style={{ fontSize: tokens.fontSize.sm, color: 'var(--text-primary)' }}>Last column</div>
+                            <ThemedSelect
+                              value={dxLast}
+                              onChange={(v) => {
+                                setDxLast(v);
+                                if (dxFirst) {
+                                  const patch = applyCodeRange(dxFirst, v, dxFields, columns);
+                                  setMappings(m => {
+                                    const next = {...m};
+                                    Object.entries(patch).forEach(([k, val]) => { if (val) next[k] = val; else delete next[k]; });
+                                    return next;
+                                  });
+                                }
+                              }}
+                              placeholder={dxFirst ? 'Same as first' : 'Select first column'}
+                              searchable
+                              options={[
+                                { value: '', label: dxFirst ? 'Same as first' : 'Select first column' },
+                                ...columns
+                                  .filter((_, i) => !dxFirst || i >= columns.indexOf(dxFirst))
+                                  .map((c) => {
+                                    const origIdx = columns.indexOf(c);
+                                    return { value: c, label: `${origIdx}: ${c}`, searchLabel: c, sublabel: sampleRow[c] ?? '' };
+                                  }),
+                              ]}
+                            />
+                            <div style={{ fontSize: 11, fontFamily: tokens.font.mono, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {dxLast ? (sampleRow[dxLast] || '—') : ''}
+                            </div>
+                          </div>
+                          {dxFirst && (
+                            <div style={{ padding: '6px 4px 2px', fontSize: 12, color: 'var(--text-muted)' }}>
+                              {dxMappedCount} of {dxFields.length} diagnosis codes mapped
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+
                 const isMapped = !!mappings[field];
                 return (
                   <div key={field}>
@@ -879,6 +1270,7 @@ export default function ROIAnalysis() {
                         value={mappings[field] || ''}
                         onChange={(v) => updateMapping(field, v)}
                         placeholder="Not Mapped"
+                        searchable
                         options={[
                           { value: '', label: 'Not Mapped' },
                           ...columns.map((c, i) => ({
@@ -897,6 +1289,21 @@ export default function ROIAnalysis() {
                         {mappings[field] ? (sampleRow[mappings[field]] || '—') : ''}
                       </div>
                     </div>
+
+                    {MONEY_FIELDS.has(field) && (
+                      <div style={{ background: 'var(--bg-tertiary)', borderBottom: '1px solid var(--border-light)', padding: '6px 12px 6px 28px', opacity: mappings[field] ? 1 : 0.4 }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-muted)', cursor: mappings[field] ? 'pointer' : 'default', userSelect: 'none' }}>
+                          <input
+                            type="checkbox"
+                            checked={!!divideAmountFields[field]}
+                            disabled={!mappings[field]}
+                            onChange={e => setDivideAmountFields(prev => ({ ...prev, [field]: e.target.checked }))}
+                            style={{ accentColor: 'var(--accent)', width: 13, height: 13 }}
+                          />
+                          Divide by 100 (value stored in cents)
+                        </label>
+                      </div>
+                    )}
 
                     {GENDER_FIELDS.has(field) && mappings[field] && uniqueGenderValues.length > 0 && (
                       <div style={{ background: 'var(--bg-tertiary)', borderBottom: '1px solid var(--border-light)', padding: '10px 12px 10px 28px', maxWidth: 480 }}>
@@ -998,7 +1405,7 @@ export default function ROIAnalysis() {
                         whiteSpace: 'nowrap', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis',
                         color: 'var(--text-primary)',
                       }} title={r[mappings[f]]}>
-                        {transformValue(f, r[mappings[f]] ?? '', { relationship: relationshipMappings, gender: genderMappings }) || '—'}
+                        {transformValue(f, r[mappings[f]] ?? '', { relationship: relationshipMappings, gender: genderMappings }, { divideBy100: !!divideAmountFields[f] }) || '—'}
                       </td>
                     ))}
                   </tr>
@@ -1062,7 +1469,7 @@ export default function ROIAnalysis() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Info size={14} color="var(--accent)" />
                 <span style={{ fontSize: tokens.fontSize.sm, fontWeight: 700, color: 'var(--text-primary)' }}>
-                  How To Use Data Forge
+                  How To Use DataForge
                 </span>
               </div>
               <button
@@ -1109,6 +1516,11 @@ export default function ROIAnalysis() {
                   title: 'Handle skipped rows',
                   desc: 'Rows with unrecognized date values are automatically excluded from the export to protect the database. If any rows are skipped, an "Export Skipped Rows" button appears so you can review and fix them separately.',
                 },
+                {
+                  step: 8,
+                  title: 'Troubleshooting',
+                  desc: 'If the app crashes or behaves unexpectedly, a debug log is written automatically every session. Click "Open Log" in the header to open it in your text editor, or find it at: Mac → ~/Library/Application Support/data-forge/debug.log · Windows → %APPDATA%\\data-forge\\debug.log. The log captures every IPC operation, renderer errors, and crash details with timestamps.',
+                },
               ].map(({ step, title, desc }) => (
                 <div key={step} style={{ display: 'flex', gap: 14 }}>
                   <div style={{
@@ -1129,6 +1541,27 @@ export default function ROIAnalysis() {
                   </div>
                 </div>
               ))}
+            </div>
+            <div style={{ margin: '0 20px 4px', padding: '10px 14px', borderRadius: tokens.radius.md, background: 'var(--bg-tertiary)', border: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 2 }}>Debug log</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: tokens.font.mono }}>
+                    ~/Library/Application Support/data-forge/debug.log
+                  </div>
+                </div>
+                <button
+                  onClick={() => window.electronAPI.openLogFile()}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 5, flexShrink: 0,
+                    padding: '5px 12px', borderRadius: tokens.radius.md,
+                    border: '1px solid var(--border)', background: 'var(--bg-input)',
+                    color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                  }}
+                >
+                  <FileText size={12} /> Open Log
+                </button>
+              </div>
             </div>
             <div style={{ padding: '10px 20px', borderTop: '1px solid var(--border)', fontSize: 11, color: 'var(--text-muted)', textAlign: 'center' }}>
               Found a bug or want a new feature? Reach out to <strong style={{ color: 'var(--text-secondary)' }}>Cody White</strong>.
@@ -1562,13 +1995,12 @@ export default function ROIAnalysis() {
               )}
 
               {/* Paid amount issues */}
-              {(validationData.paidAmtIssues.nonNumeric.length > 0 || validationData.paidAmtIssues.negative.length > 0) && (
+              {validationData.paidAmtIssues.nonNumeric.length > 0 && (
                 <div>
                   <div style={s.sectionTitle}>Paid Amount Issues</div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {[
                       { key: 'nonNumeric', label: 'Non-numeric values', list: validationData.paidAmtIssues.nonNumeric },
-                      { key: 'negative',   label: 'Negative amounts',   list: validationData.paidAmtIssues.negative },
                     ].filter(g => g.list.length > 0).map(({ key, label, list }) => {
                       const overLimit = list.length > 5;
                       return (
@@ -1732,8 +2164,7 @@ export default function ROIAnalysis() {
                Object.keys(validationData.emptyRequiredFields).length === 0 &&
                validationData.dateLogicErrors.length === 0 &&
                Object.keys(validationData.unmappedValues).length === 0 &&
-               validationData.paidAmtIssues.nonNumeric.length === 0 &&
-               validationData.paidAmtIssues.negative.length === 0 && (
+               validationData.paidAmtIssues.nonNumeric.length === 0 && (
                 <div style={{
                   display: 'flex', alignItems: 'center', gap: 8,
                   padding: '8px 12px', borderRadius: tokens.radius.md,
@@ -1750,6 +2181,9 @@ export default function ROIAnalysis() {
             <div style={s.modalFooter}>
               <button onClick={() => setValidationData(null)} style={s.btnOutline}>
                 Cancel
+              </button>
+              <button onClick={handleExportSummary} style={s.btnOutline}>
+                <Download size={13} /> Export Summary
               </button>
               {Object.values(validationData.dateFieldIssues).some(i => i.unparseable.length > 0) && (
                 <button onClick={handleExportSkippedRows} style={s.btnOutline}>

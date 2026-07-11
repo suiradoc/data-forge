@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronDown, Check } from 'lucide-react';
+import { ChevronDown, Check, Search } from 'lucide-react';
 import { tokens } from '../styles/theme';
 
 /**
@@ -17,6 +17,7 @@ import { tokens } from '../styles/theme';
  *   disabled     — when true, the trigger is non-interactive
  *   style        — extra styles applied to the trigger
  *   minWidth     — minimum width in px (default 180)
+ *   searchable   — when true, shows a filter input at the top of the popover
  */
 export default function ThemedSelect({
   value,
@@ -26,13 +27,16 @@ export default function ThemedSelect({
   disabled = false,
   style = {},
   minWidth = 180,
+  searchable = false,
 }) {
   const [open, setOpen] = useState(false);
   const [coords, setCoords] = useState(null);
   const [activeIndex, setActiveIndex] = useState(-1);
+  const [searchQuery, setSearchQuery] = useState('');
   const btnRef = useRef(null);
   const popRef = useRef(null);
   const itemRefs = useRef([]);
+  const searchInputRef = useRef(null);
   const searchBuf = useRef('');
   const searchTimer = useRef(null);
   const activeIndexRef = useRef(-1);
@@ -41,9 +45,25 @@ export default function ThemedSelect({
 
   const isSelectable = (opt) => opt && opt.type !== 'separator' && !opt.disabled;
 
+  const visibleOptions = useMemo(() => {
+    if (!searchable || !searchQuery.trim()) return options;
+    const q = searchQuery.trim().toLowerCase();
+    return options.filter((opt) => {
+      if (!opt || opt.type === 'separator') return false;
+      return (
+        String(opt.label ?? '').toLowerCase().includes(q) ||
+        String(opt.value ?? '').toLowerCase().includes(q)
+      );
+    });
+  }, [options, searchQuery, searchable]);
+
+  const visibleOptionsRef = useRef(visibleOptions);
+  useEffect(() => { visibleOptionsRef.current = visibleOptions; }, [visibleOptions]);
+
   const close = useCallback(() => {
     setOpen(false);
     setActiveIndex(-1);
+    setSearchQuery('');
     searchBuf.current = '';
     if (searchTimer.current) {
       clearTimeout(searchTimer.current);
@@ -54,46 +74,50 @@ export default function ThemedSelect({
   const findMatch = useCallback((buf, fromIdx = 0) => {
     if (!buf) return -1;
     const lower = buf.toLowerCase();
-    const n = options.length;
+    const list = visibleOptionsRef.current;
+    const n = list.length;
     const getTarget = (opt) => String(opt.searchLabel ?? opt.label ?? '').toLowerCase();
 
-    // Tier 1: startsWith on the full string — preserves the "press a letter to jump" feel.
     for (let i = 0; i < n; i++) {
       const idx = (fromIdx + i) % n;
-      const opt = options[idx];
+      const opt = list[idx];
       if (!isSelectable(opt)) continue;
       if (getTarget(opt).startsWith(lower)) return idx;
     }
-    // Tier 2: startsWith on any token (split on _ - space / : .) — catches "gndr" → EMP_GNDR_CD.
     for (let i = 0; i < n; i++) {
       const idx = (fromIdx + i) % n;
-      const opt = options[idx];
+      const opt = list[idx];
       if (!isSelectable(opt)) continue;
-      const tokens = getTarget(opt).split(/[_\-\s/:.]+/).filter(Boolean);
-      if (tokens.some((t) => t.startsWith(lower))) return idx;
+      const toks = getTarget(opt).split(/[_\-\s/:.]+/).filter(Boolean);
+      if (toks.some((t) => t.startsWith(lower))) return idx;
     }
-    // Tier 3: plain substring anywhere.
     for (let i = 0; i < n; i++) {
       const idx = (fromIdx + i) % n;
-      const opt = options[idx];
+      const opt = list[idx];
       if (!isSelectable(opt)) continue;
       if (getTarget(opt).includes(lower)) return idx;
     }
     return -1;
-  }, [options]);
+  }, []);
 
   const navigateActive = useCallback((dir) => {
-    const n = options.length;
+    const list = visibleOptionsRef.current;
+    const n = list.length;
     if (!n) return;
     let i = activeIndexRef.current;
+    if (i < 0) i = dir > 0 ? -1 : n;
     for (let step = 0; step < n; step++) {
       i = (i + dir + n) % n;
-      if (isSelectable(options[i])) {
-        setActiveIndex(i);
-        return;
-      }
+      if (isSelectable(list[i])) { setActiveIndex(i); return; }
     }
-  }, [options]);
+  }, []);
+
+  const selectActive = useCallback(() => {
+    const idx = activeIndexRef.current;
+    if (idx < 0) return;
+    const opt = visibleOptionsRef.current[idx];
+    if (opt && isSelectable(opt)) { onChange(opt.value); close(); }
+  }, [onChange, close]);
 
   const handleTypeahead = useCallback((char) => {
     if (searchTimer.current) clearTimeout(searchTimer.current);
@@ -104,12 +128,10 @@ export default function ThemedSelect({
     if (idx >= 0) {
       nextBuf = extended;
     } else if (searchBuf.current.length > 0) {
-      // Couldn't extend — restart with just this char, advance past current
       const startFrom = activeIndexRef.current >= 0 ? activeIndexRef.current + 1 : 0;
       idx = findMatch(lower, startFrom);
       nextBuf = idx >= 0 ? lower : '';
     } else {
-      // Single char, same as buffer length 0 — search from after current
       const startFrom = activeIndexRef.current >= 0 ? activeIndexRef.current + 1 : 0;
       idx = findMatch(lower, startFrom);
       nextBuf = idx >= 0 ? lower : '';
@@ -122,7 +144,14 @@ export default function ThemedSelect({
     }, 600);
   }, [findMatch]);
 
-  // Click outside / Escape / keyboard navigation while open
+  // Auto-focus the search input when the popover opens in searchable mode.
+  useEffect(() => {
+    if (open && searchable) {
+      setTimeout(() => searchInputRef.current?.focus(), 0);
+    }
+  }, [open, searchable]);
+
+  // Click outside / Escape / keyboard navigation while open.
   useEffect(() => {
     if (!open) return;
     const onDown = (e) => {
@@ -137,27 +166,23 @@ export default function ThemedSelect({
       if (e.key === 'ArrowUp')   { e.preventDefault(); navigateActive(-1); return; }
       if (e.key === 'Home') {
         e.preventDefault();
-        for (let i = 0; i < options.length; i++) if (isSelectable(options[i])) { setActiveIndex(i); break; }
+        const list = visibleOptionsRef.current;
+        for (let i = 0; i < list.length; i++) if (isSelectable(list[i])) { setActiveIndex(i); break; }
         return;
       }
       if (e.key === 'End') {
         e.preventDefault();
-        for (let i = options.length - 1; i >= 0; i--) if (isSelectable(options[i])) { setActiveIndex(i); break; }
+        const list = visibleOptionsRef.current;
+        for (let i = list.length - 1; i >= 0; i--) if (isSelectable(list[i])) { setActiveIndex(i); break; }
         return;
       }
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
-        const idx = activeIndexRef.current;
-        if (idx >= 0) {
-          const opt = options[idx];
-          if (isSelectable(opt)) {
-            onChange(opt.value);
-            close();
-          }
-        }
+        selectActive();
         return;
       }
-      if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      // Skip typeahead when searchable — the input captures character keys directly.
+      if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey && !searchable) {
         e.preventDefault();
         handleTypeahead(e.key);
       }
@@ -176,9 +201,9 @@ export default function ThemedSelect({
       window.removeEventListener('scroll', onScroll, true);
       window.removeEventListener('resize', close);
     };
-  }, [open, close, navigateActive, handleTypeahead, options, onChange]);
+  }, [open, close, navigateActive, handleTypeahead, selectActive, searchable]);
 
-  // Scroll active item into view as it changes
+  // Scroll active item into view as it changes.
   useEffect(() => {
     if (!open || activeIndex < 0) return;
     itemRefs.current[activeIndex]?.scrollIntoView({ block: 'nearest' });
@@ -188,7 +213,6 @@ export default function ThemedSelect({
     if (disabled) return;
     if (!open && btnRef.current) {
       const r = btnRef.current.getBoundingClientRect();
-      // Flip up if there isn't room below.
       const spaceBelow = window.innerHeight - r.bottom;
       const flipUp = spaceBelow < 240 && r.top > 240;
       setCoords({
@@ -197,12 +221,12 @@ export default function ThemedSelect({
         bottom: flipUp ? window.innerHeight - r.top + 4 : null,
         width: r.width,
       });
-      // Initialize activeIndex to the current selection, or first selectable.
-      const selIdx = options.findIndex((o) => o && o.value === value);
-      setActiveIndex(selIdx >= 0 ? selIdx : options.findIndex(isSelectable));
+      const list = visibleOptionsRef.current;
+      const selIdx = list.findIndex((o) => o && o.value === value);
+      setActiveIndex(selIdx >= 0 ? selIdx : (searchable ? -1 : list.findIndex(isSelectable)));
     }
     setOpen((o) => !o);
-  }, [disabled, open, options, value]);
+  }, [disabled, open, value, searchable]);
 
   // Closed-state keyboard handling on the trigger itself.
   const onTriggerKey = (e) => {
@@ -214,33 +238,46 @@ export default function ThemedSelect({
     }
     if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
       e.preventDefault();
-      const lower = e.key.toLowerCase();
-      const idx = findMatch(lower, 0);
-      if (idx >= 0) {
-        searchBuf.current = lower;
-        if (searchTimer.current) clearTimeout(searchTimer.current);
-        searchTimer.current = setTimeout(() => {
-          searchBuf.current = '';
-          searchTimer.current = null;
-        }, 600);
-        // Open popover anchored to trigger, with this item active.
-        if (btnRef.current) {
-          const r = btnRef.current.getBoundingClientRect();
-          const spaceBelow = window.innerHeight - r.bottom;
-          const flipUp = spaceBelow < 240 && r.top > 240;
-          setCoords({
-            left: r.left,
-            top: flipUp ? null : r.bottom + 4,
-            bottom: flipUp ? window.innerHeight - r.top + 4 : null,
-            width: r.width,
-          });
-        }
-        setActiveIndex(idx);
-        setOpen(true);
-      } else {
+      if (searchable) {
         toggle();
+      } else {
+        const lower = e.key.toLowerCase();
+        const idx = findMatch(lower, 0);
+        if (idx >= 0) {
+          searchBuf.current = lower;
+          if (searchTimer.current) clearTimeout(searchTimer.current);
+          searchTimer.current = setTimeout(() => {
+            searchBuf.current = '';
+            searchTimer.current = null;
+          }, 600);
+          if (btnRef.current) {
+            const r = btnRef.current.getBoundingClientRect();
+            const spaceBelow = window.innerHeight - r.bottom;
+            const flipUp = spaceBelow < 240 && r.top > 240;
+            setCoords({
+              left: r.left,
+              top: flipUp ? null : r.bottom + 4,
+              bottom: flipUp ? window.innerHeight - r.top + 4 : null,
+              width: r.width,
+            });
+          }
+          setActiveIndex(idx);
+          setOpen(true);
+        } else {
+          toggle();
+        }
       }
     }
+  };
+
+  // Search input — stopPropagation on navigation keys so the document listener
+  // doesn't also handle them.
+  const onSearchKeyDown = (e) => {
+    if (e.key === 'Escape') { e.stopPropagation(); close(); return; }
+    if (e.key === 'Tab') { e.stopPropagation(); close(); return; }
+    if (e.key === 'ArrowDown') { e.stopPropagation(); e.preventDefault(); navigateActive(1); return; }
+    if (e.key === 'ArrowUp') { e.stopPropagation(); e.preventDefault(); navigateActive(-1); return; }
+    if (e.key === 'Enter') { e.stopPropagation(); e.preventDefault(); selectActive(); return; }
   };
 
   const selected = options.find((o) => o && o.value === value);
@@ -278,27 +315,28 @@ export default function ThemedSelect({
         border: '1px solid var(--border)',
         borderRadius: tokens.radius.md,
         boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
-        padding: '4px 0',
-        maxHeight: 280,
-        overflowY: 'auto',
+        maxHeight: searchable ? 320 : 280,
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
         zIndex: 9999,
         animation: 'fadeIn 0.1s ease',
       }
     : null;
 
-  const itemStyle = (selected, disabled, active) => ({
+  const itemStyle = (isSelected, isDisabled, isActive) => ({
     display: 'flex', alignItems: 'center', gap: 8,
     width: '100%',
     padding: '8px 14px',
     fontSize: 13,
-    color: disabled ? 'var(--text-muted)' : 'var(--text-primary)',
-    background: active ? 'var(--bg-hover)' : 'transparent',
+    color: isDisabled ? 'var(--text-muted)' : 'var(--text-primary)',
+    background: isActive ? 'var(--bg-hover)' : 'transparent',
     border: 'none',
-    cursor: disabled ? 'default' : 'pointer',
+    cursor: isDisabled ? 'default' : 'pointer',
     textAlign: 'left',
     fontFamily: 'inherit',
-    fontWeight: selected ? 600 : 400,
-    opacity: disabled ? 0.5 : 1,
+    fontWeight: isSelected ? 600 : 400,
+    opacity: isDisabled ? 0.5 : 1,
   });
 
   return (
@@ -327,69 +365,108 @@ export default function ThemedSelect({
 
       {open && coords && createPortal(
         <div ref={popRef} style={popStyle}>
-          {options.length === 0 && (
-            <div style={{ padding: '10px 14px', fontSize: 13, color: 'var(--text-muted)' }}>
-              No options
-            </div>
-          )}
-          {options.map((opt, i) => {
-            if (opt?.type === 'separator') {
-              return (
-                <div
-                  key={`sep-${i}`}
-                  style={{ height: 1, background: 'var(--border-light)', margin: '4px 0' }}
-                />
-              );
-            }
-            const isSelected = opt.value === value;
-            const isActive = activeIndex === i;
-            return (
-              <button
-                key={opt.value ?? `opt-${i}`}
-                ref={(el) => { itemRefs.current[i] = el; }}
-                type="button"
-                disabled={opt.disabled}
-                onClick={() => {
-                  if (opt.disabled) return;
-                  onChange(opt.value);
-                  close();
-                }}
-                onMouseEnter={(e) => {
-                  if (!opt.disabled) {
-                    e.currentTarget.style.background = 'var(--bg-hover)';
-                    setActiveIndex(i);
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = activeIndexRef.current === i
-                    ? 'var(--bg-hover)' : 'transparent';
-                }}
-                style={itemStyle(isSelected, opt.disabled, isActive)}
-              >
-                <Check
+          {searchable && (
+            <div style={{ padding: '6px 8px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+              <div style={{ position: 'relative' }}>
+                <Search
                   size={12}
                   style={{
-                    color: isSelected ? 'var(--accent)' : 'transparent',
-                    flexShrink: 0,
+                    position: 'absolute',
+                    left: 8,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: 'var(--text-muted)',
+                    pointerEvents: 'none',
                   }}
                 />
-                <span style={{ flex: 1, overflow: 'hidden', minWidth: 0 }}>
-                  <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {opt.label}
-                  </span>
-                  {opt.sublabel && (
-                    <span style={{
-                      display: 'block', fontSize: 11, color: 'var(--text-muted)',
-                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                      marginTop: 1, fontFamily: 'monospace',
-                    }}>
-                      {opt.sublabel}
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => { setSearchQuery(e.target.value); setActiveIndex(-1); }}
+                  onKeyDown={onSearchKeyDown}
+                  placeholder="Search columns…"
+                  style={{
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    padding: '5px 8px 5px 26px',
+                    borderRadius: tokens.radius.sm,
+                    border: '1px solid var(--border)',
+                    background: 'var(--bg-input)',
+                    color: 'var(--text-primary)',
+                    fontSize: 12,
+                    outline: 'none',
+                    fontFamily: 'inherit',
+                  }}
+                />
+              </div>
+            </div>
+          )}
+          <div style={{ overflowY: 'auto', padding: '4px 0', flex: '1 1 auto' }}>
+            {visibleOptions.length === 0 && (
+              <div style={{ padding: '10px 14px', fontSize: 13, color: 'var(--text-muted)' }}>
+                No options
+              </div>
+            )}
+            {visibleOptions.map((opt, i) => {
+              if (opt?.type === 'separator') {
+                return (
+                  <div
+                    key={`sep-${i}`}
+                    style={{ height: 1, background: 'var(--border-light)', margin: '4px 0' }}
+                  />
+                );
+              }
+              const isSelected = opt.value === value;
+              const isActive = activeIndex === i;
+              return (
+                <button
+                  key={opt.value ?? `opt-${i}`}
+                  ref={(el) => { itemRefs.current[i] = el; }}
+                  type="button"
+                  disabled={opt.disabled}
+                  onClick={() => {
+                    if (opt.disabled) return;
+                    onChange(opt.value);
+                    close();
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!opt.disabled) {
+                      e.currentTarget.style.background = 'var(--bg-hover)';
+                      setActiveIndex(i);
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = activeIndexRef.current === i
+                      ? 'var(--bg-hover)' : 'transparent';
+                  }}
+                  style={itemStyle(isSelected, opt.disabled, isActive)}
+                >
+                  <Check
+                    size={12}
+                    style={{
+                      color: isSelected ? 'var(--accent)' : 'transparent',
+                      flexShrink: 0,
+                    }}
+                  />
+                  <span style={{ flex: 1, overflow: 'hidden', minWidth: 0 }}>
+                    <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {opt.label}
                     </span>
-                  )}
-                </span>
-              </button>
-            );
-          })}
+                    {opt.sublabel && (
+                      <span style={{
+                        display: 'block', fontSize: 11, color: 'var(--text-muted)',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        marginTop: 1, fontFamily: 'monospace',
+                      }}>
+                        {opt.sublabel}
+                      </span>
+                    )}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>,
         document.body
       )}

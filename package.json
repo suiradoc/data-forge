@@ -1,7 +1,7 @@
 {
   "name": "data-forge",
-  "productName": "Data Forge",
-  "version": "1.0.0",
+  "productName": "DataForge",
+  "version": "1.12.0",
   "description": "ROI data file mapper and CSV exporter",
   "main": ".vite/build/index.js",
   "scripts": {
